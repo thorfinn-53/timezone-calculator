@@ -167,6 +167,18 @@ function MinuteHoverLayer({ graph, visibleMods, modRanks, deviceTimezone }) {
         width={plotArea.width}
         height={plotArea.height}
         fill="transparent"
+        style={{ touchAction: "pan-y" }}
+        onPointerDown={event => {
+          if (event.pointerType !== "touch") return
+
+          event.currentTarget.setPointerCapture(event.pointerId)
+          const bounds = event.currentTarget.getBoundingClientRect()
+          const minute = Math.min(
+            1439,
+            Math.floor(((event.clientX - bounds.left) / bounds.width) * 1440),
+          )
+          setHoveredMinute(minute)
+        }}
         onPointerMove={event => {
           const bounds = event.currentTarget.getBoundingClientRect()
           const minute = Math.min(
@@ -175,7 +187,9 @@ function MinuteHoverLayer({ graph, visibleMods, modRanks, deviceTimezone }) {
           )
           setHoveredMinute(previous => previous === minute ? previous : minute)
         }}
-        onPointerLeave={() => setHoveredMinute(null)}
+        onPointerLeave={event => {
+          if (event.pointerType !== "touch") setHoveredMinute(null)
+        }}
       />
       {hoveredMinute !== null && (
         <>
