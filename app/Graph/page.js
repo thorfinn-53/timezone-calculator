@@ -25,10 +25,37 @@ const RANK_GROUPS = {
   "RECRUIT": ["RECRUIT"],
 }
 
-function formatUtcMinute(minute) {
+const MINUTES_PER_DAY = 1440
+
+function formatLocalMinute(minute) {
   const hour = Math.floor(minute / 60) % 24
   const minutes = minute % 60
   return `${String(hour).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`
+}
+
+function shiftGraphToLocalTime(graph, utcOffsetMinutes) {
+  return graph
+    .flatMap(segment => {
+      const duration = segment.end_minute - segment.start_minute
+      const localStart =
+        (segment.start_minute + utcOffsetMinutes + MINUTES_PER_DAY) %
+        MINUTES_PER_DAY
+      const localEnd = localStart + duration
+
+      if (localEnd <= MINUTES_PER_DAY) {
+        return [{ ...segment, start_minute: localStart, end_minute: localEnd }]
+      }
+
+      return [
+        { ...segment, start_minute: localStart, end_minute: MINUTES_PER_DAY },
+        {
+          ...segment,
+          start_minute: 0,
+          end_minute: localEnd - MINUTES_PER_DAY,
+        },
+      ]
+    })
+    .sort((first, second) => first.start_minute - second.start_minute)
 }
 
 function transformData(rawData, allMods) {
@@ -115,7 +142,7 @@ function CoverageBars({ graph, visibleMods, modRanks }) {
   })
 }
 
-function MinuteHoverLayer({ graph, visibleMods, modRanks }) {
+function MinuteHoverLayer({ graph, visibleMods, modRanks, deviceTimezone }) {
   const plotArea = usePlotArea()
   const [hoveredMinute, setHoveredMinute] = useState(null)
 
@@ -170,7 +197,7 @@ function MinuteHoverLayer({ graph, visibleMods, modRanks }) {
           >
             <div className="rounded-xl border border-gray-200 bg-white p-3 text-sm shadow-lg">
               <p className="mb-2 font-semibold text-gray-700">
-                {formatUtcMinute(hoveredMinute)} UTC
+                {formatLocalMinute(hoveredMinute)} {deviceTimezone}
               </p>
               {activeMods.length === 0 ? (
                 <p className="text-gray-400">No mods active</p>
@@ -205,8 +232,33 @@ export default function Graph() {
   const [selectedMods, setSelectedMods] = useState([])
   const [selectedRanks, setSelectedRanks] = useState([])
   const [loadError, setLoadError] = useState("")
+  const [deviceTimezone, setDeviceTimezone] = useState("")
+  const [utcOffsetMinutes, setUtcOffsetMinutes] = useState(0)
   const [, startTransition] = useTransition()
   const router = useRouter()
+
+  useEffect(() => {
+    const updateDeviceTimezone = () => {
+      const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone
+      const offsetMinutes = -new Date().getTimezoneOffset()
+
+      setDeviceTimezone(previous =>
+        previous === timezone ? previous : timezone,
+      )
+      setUtcOffsetMinutes(previous =>
+        previous === offsetMinutes ? previous : offsetMinutes,
+      )
+    }
+
+    updateDeviceTimezone()
+    window.addEventListener("focus", updateDeviceTimezone)
+    const intervalId = window.setInterval(updateDeviceTimezone, 60_000)
+
+    return () => {
+      window.removeEventListener("focus", updateDeviceTimezone)
+      window.clearInterval(intervalId)
+    }
+  }, [])
 
   useEffect(() => {
     async function fetchAll() {
@@ -261,6 +313,11 @@ export default function Graph() {
     [rawGraph, allMods],
   )
 
+  const localGraph = useMemo(
+    () => shiftGraphToLocalTime(rawGraph, utcOffsetMinutes),
+    [rawGraph, utcOffsetMinutes],
+  )
+
   const toggleMod = (mod) => {
     startTransition(() => {
       setSelectedMods(prev =>
@@ -293,7 +350,9 @@ export default function Graph() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Moderator coverage</h1>
-          <p className="text-xs sm:text-sm text-gray-500 mt-1">Times shown in UTC</p>
+          <p className="text-xs sm:text-sm text-gray-500 mt-1">
+            Times shown in {deviceTimezone || "your device timezone"}
+          </p>
         </div>
         <button
           onClick={() => router.push("/")}
@@ -379,7 +438,7 @@ export default function Graph() {
                   type="number"
                   domain={[0, 1440]}
                   tickCount={25}
-                  tickFormatter={minute => formatUtcMinute(minute)}
+                  tickFormatter={minute => formatLocalMinute(minute)}
                   tick={{ fontSize: 11, fill: "#6b7280" }}
                   axisLine={{ stroke: "#e5e7eb" }}
                   tickLine={false}
@@ -393,14 +452,15 @@ export default function Graph() {
                   label={{ value: "Mods active", angle: -90, position: "insideLeft", offset: 10, style: { fontSize: 11, fill: "#9ca3af" } }}
                 />
                 <CoverageBars
-                  graph={rawGraph}
+                  graph={localGraph}
                   visibleMods={visibleMods}
                   modRanks={modRanks}
                 />
                 <MinuteHoverLayer
-                  graph={rawGraph}
+                  graph={localGraph}
                   visibleMods={visibleMods}
                   modRanks={modRanks}
+                  deviceTimezone={deviceTimezone}
                 />
               </AreaChart>
             </ResponsiveContainer>
