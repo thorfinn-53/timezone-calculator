@@ -167,7 +167,7 @@ function MinuteHoverLayer({ graph, visibleMods, modRanks, deviceTimezone }) {
         width={plotArea.width}
         height={plotArea.height}
         fill="transparent"
-        style={{ touchAction: "pan-y" }}
+        className="graph-touch-layer"
         onPointerDown={event => {
           if (event.pointerType !== "touch") return
 
@@ -441,6 +441,12 @@ export default function Graph() {
         )}
         <div className="overflow-x-auto">
           <div style={{ minWidth: "1400px" }}>
+            <div
+              className="flex h-8 items-center px-3 text-xs text-gray-400"
+              style={{ touchAction: "pan-x" }}
+            >
+              Swipe here to scroll the graph
+            </div>
             <ResponsiveContainer width="100%" height={500}>
               <AreaChart
                 data={graphData}
@@ -478,6 +484,11 @@ export default function Graph() {
                 />
               </AreaChart>
             </ResponsiveContainer>
+            <div
+              className="h-8"
+              aria-hidden="true"
+              style={{ touchAction: "pan-x" }}
+            />
           </div>
         </div>
       </div>

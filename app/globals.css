@@ -25,3 +25,9 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+@media (pointer: coarse) {
+  .graph-touch-layer {
+    touch-action: none;
+  }
+}
